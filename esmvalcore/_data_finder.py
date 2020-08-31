@@ -92,13 +92,14 @@ def select_files(filenames, start_year, end_year):
 def _replace_tags(paths, variable):
     """Replace tags in the config-developer's file with actual values."""
     if isinstance(paths, str):
-        paths = (paths.strip('/'), )
-    else:
-        paths = [path.strip('/') for path in paths]
+        paths = (paths, )
+    new_paths = []
     tlist = set()
-
     for path in paths:
+        path = path.strip('/')
         tlist = tlist.union(re.findall(r'{([^}]*)}', path))
+        new_paths.append(path)
+    paths = new_paths
     logger.debug(tlist)
 
     for tag in tlist:
@@ -111,7 +112,7 @@ def _replace_tags(paths, variable):
             replacewith = variable[tag]
         else:
             raise KeyError("Dataset key {} must be specified for {}, check "
-                           "your recipe entry".format(tag, variable))
+                        "your recipe entry".format(tag, variable))
 
         paths = _replace_tag(paths, original_tag, replacewith)
     return paths
