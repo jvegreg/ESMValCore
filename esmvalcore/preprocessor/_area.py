@@ -376,7 +376,8 @@ def _select_representative_point(shape, lon, lat):
     """Select a representative point for `shape` from `lon` and `lat`."""
     representative_point = shape.representative_point()
     points = shapely.geometry.MultiPoint(
-        np.stack((np.ravel(lon), np.ravel(lat)), axis=1))
+        np.stack((np.ravel(lon), np.ravel(lat)), axis=1)
+    )
     nearest_point = shapely.ops.nearest_points(points, representative_point)[0]
     nearest_lon, nearest_lat = nearest_point.coords[0]
     select = (lon == nearest_lon) & (lat == nearest_lat)
