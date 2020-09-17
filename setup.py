@@ -34,7 +34,6 @@ REQUIREMENTS = {
         'dask[array]',
         'fiona',
         'fire',
-        'mapgenerator',
         'nc-time-axis',  # needed by iris.plot
         'netCDF4',
         'numba',

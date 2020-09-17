@@ -4,7 +4,6 @@ channels:
   - conda-forge
 
 dependencies:
-  - basemap
   - compilers
   - esmpy
   - iris>=2.2.1
