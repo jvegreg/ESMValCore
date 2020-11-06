@@ -11,6 +11,8 @@ import logging
 import iris
 import numpy as np
 
+from ._shared import get_iris_analysis_operation, operator_accept_weights
+
 logger = logging.getLogger(__name__)
 
 
@@ -295,7 +297,7 @@ def volume_statistics(
     return _create_cube_time(src_cube, result, times)
 
 
-def depth_integration(cube):
+def depth_integration(cube, operator='sum'):
     """
     Determine the total sum over the vertical component.
 
@@ -308,6 +310,9 @@ def depth_integration(cube):
     cube: iris.cube.Cube
         input cube.
 
+    operator: str, default 'sum
+        Operator to apply
+
     Returns
     -------
     iris.cube.Cube
@@ -315,20 +320,22 @@ def depth_integration(cube):
     """
     # ####
     depth = cube.coord(axis='z')
-    thickness = depth.bounds[..., 1] - depth.bounds[..., 0]
+    operation = get_iris_analysis_operation(operator)
+    weights = None
+    if operator_accept_weights(operator):
+        thickness = depth.bounds[..., 1] - depth.bounds[..., 0]
 
-    if depth.ndim == 1:
-        slices = [None for i in cube.shape]
-        coord_dim = cube.coord_dims(cube.coord(axis='z'))[0]
-        slices[coord_dim] = slice(None)
-        thickness = np.abs(thickness[tuple(slices)])
-
-    ones = np.ones_like(cube.data)
-
-    weights = thickness * ones
-
-    result = cube.collapsed(cube.coord(axis='z'), iris.analysis.SUM,
-                            weights=weights)
+        if depth.ndim == 1:
+            slices = [None for i in cube.shape]
+            coord_dim = cube.coord_dims(cube.coord(axis='z'))[0]
+            slices[coord_dim] = slice(None)
+            thickness = np.abs(thickness[tuple(slices)])
+        ones = np.ones_like(cube.data)
+        weights = thickness * ones
+        result = cube.collapsed(
+            cube.coord(axis='z'), operation, weights=weights)
+    else:
+        result = cube.collapsed(cube.coord(axis='z'), operation)
 
     result.rename('Depth_integrated_' + str(cube.name()))
     # result.units = Unit('m') * result.units # This doesn't work:

@@ -1629,3 +1629,24 @@ The example below shows how to set all values below zero to zero.
       clip:
         minimum: 0
         maximum: null
+
+``extract``
+-----------------
+
+Extract a single point from the data. This is done using either
+nearest or linear interpolation.
+
+Returns a cube with the extracted point(s), and with adjusted coordinates
+(see below).
+
+Multiple points can also be extracted, by supplying an array of
+coordinates. The resulting point cube will match the respective coordinate to
+those of the input coordinates. If the input coordinate is a scalar, the
+dimension will be missing in the output cube (that is, it will be a scalar).
+
+Parameters:
+  * ``cube``: the input dataset cube.
+  * ``definition``: dictionary of coordinates (str) and values (float,
+    array of floats) of the point to be extracted. 
+  * ``scheme``: interpolation scheme: either ``'linear'`` or
+    ``'nearest'``. There is no default.

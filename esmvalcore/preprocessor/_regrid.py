@@ -369,6 +369,45 @@ def extract_point(cube, latitude, longitude, scheme):
     cube = cube.interpolate(point, scheme=scheme)
     return cube
 
+def extract(cube, definition, scheme):
+    """Extract a point in any coordinates, with interpolation
+
+    Extracts a point from a cube following, according
+    to the interpolation scheme `scheme`.
+
+    Multiple points can also be extracted, by supplying an array of
+    coordinates. The resulting point cube will match the respective latitude and longitude coordinate to
+    those of the input coordinates. If the input coordinate is a
+    scalar, the dimension will be missing in the output cube (that is,
+    it will be a scalar).
+
+
+    Parameters
+    ----------
+    cube : cube
+        The source cube to extract a point from.
+
+    defintion : dict(str, float or array of float)
+        The coordinate - values pairs to extract
+
+    scheme : str
+        The interpolation scheme. 'linear' or 'nearest'. No default.
+
+
+    Returns
+    -------
+    Returns a cube with the extracted point(s), and with adjusted
+    coordinates (see above).
+
+    """
+
+    msg = f"Unknown interpolation scheme, got {scheme!r}."
+    scheme = POINT_INTERPOLATION_SCHEMES.get(scheme.lower())
+    if not scheme:
+        raise ValueError(msg)
+    cube = cube.interpolate(definition.items(), scheme=scheme)
+    return cube
+
 
 def regrid(cube, target_grid, scheme, lat_offset=True, lon_offset=True):
     """Perform horizontal regridding.

@@ -43,7 +43,7 @@ from ._mask import (
 )
 from ._multimodel import multi_model_statistics
 from ._other import clip
-from ._regrid import extract_levels, extract_point, regrid
+from ._regrid import extract, extract_levels, extract_point, regrid
 from ._time import (
     annual_statistics,
     anomalies,
@@ -113,6 +113,7 @@ __all__ = [
     'regrid',
     # Point interpolation
     'extract_point',
+    'extract',
     # Masking missing values
     'mask_multimodel',
     'mask_fillvalues',
