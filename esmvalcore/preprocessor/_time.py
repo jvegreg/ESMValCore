@@ -8,6 +8,7 @@ import datetime
 import logging
 from warnings import filterwarnings
 
+
 import dask.array as da
 import iris
 import iris.coord_categorisation
@@ -16,8 +17,10 @@ import iris.exceptions
 import iris.util
 import numpy as np
 from iris.time import PartialDateTime
+import cf_units
 
 from ._shared import get_iris_analysis_operation, operator_accept_weights
+from ._other import _group_products
 
 logger = logging.getLogger(__name__)
 
@@ -725,3 +728,127 @@ def timeseries_filter(cube, window, span,
                                weights=wgts)
 
     return cube
+
+def add_lead_time(input_products: set, output_products: set, groupby: str = ('project', 'dataset', 'exp')):
+    """
+    Sets the origin of the time coordinate to the lead time.
+    The original time coordinate gets saved as an iris.coord.AuxCoord.
+    The startdate gets saved as an scalar iris.coord.AuxCoord.
+
+    If the startdate cannot be found or is set to 'none', the preprocessor
+    returns the input cube.
+
+    Parameters
+    ----------
+    cube: iris.cube.Cube
+        input cube.
+
+    Returns
+    -------
+    cube: iris.cube.Cube
+        cube with the converted time axis.
+
+    """
+    lead_time_products = set()
+    for identifier, products in _group_products(input_products, by=groupby):
+        cubes = [cube for product in products for cube in product.cubes]
+        cubes = sorted(cubes, key=lambda c: c.coord("time").cell(0).point)
+        cubelist = iris.cube.CubeList()
+        tpoints = {}
+        tbounds = {}
+        ltpoints = {}
+        ltbounds = {}
+        for cube in cubes:
+            try:
+                startdate = int(cube.attributes['sub_experiment_id'][1:])
+            except (KeyError, ValueError):
+                logger.error(
+                    "Cannot retrieve startdate" +
+                    "from attribute sub_experiment_id. ")
+            
+            try:
+                ensemble = cube.attributes['variant_label']
+            except (KeyError, ValueError):
+                logger.error(
+                    "Cannot retrieve ensemble" +
+                    "from attribute variant_label. ")
+
+            cube.attributes = None
+
+            time = cube.coord('time')
+            tpoints[startdate] = time.points
+            tbounds[startdate] = time.bounds
+            tunits = time.units
+
+            starttime = tunits.num2date(time.points[0])
+            ltunits = cf_units.Unit(
+                f'days since {starttime.year}-{starttime.month}-1 00:00:00',
+                calendar=tunits.calendar)
+            time.convert_units(ltunits)
+            ltpoints[startdate] = time.points
+            ltbounds[startdate] = time.bounds
+
+            cube.remove_coord('time')
+
+            startdate_coord = iris.coords.AuxCoord(
+                startdate,
+                var_name='startdate',
+                standard_name=None,
+                long_name='startdate',
+                units=cf_units.Unit('1'))
+            cube.add_aux_coord(startdate_coord, ())
+
+            ensemble_coord = iris.coords.AuxCoord(
+                ensemble,
+                var_name='ensemble',
+                standard_name=None,
+                long_name='ensemble',
+                units=cf_units.Unit('1'))
+            cube.add_aux_coord(ensemble_coord, ())
+
+            cubelist.append(cube)
+        
+        tpoints = list(tpoints.values())
+        tbounds = list(tbounds.values())
+        ltpoints = list(ltpoints.values())
+        ltbounds = list(ltbounds.values())
+
+        output_cube = cubelist.merge_cube()
+
+        print(output_cube.coords())
+
+        tindex = iris.coords.DimCoord(
+            np.arange(1, len(tpoints[0])+1),
+            var_name='t',
+            long_name='index along time dimension')
+        # pending to correct
+        output_cube.add_dim_coord(tindex, 2)
+
+        print(output_cube.coords())
+
+        tcoord = iris.coords.AuxCoord(
+            np.array(tpoints),
+            var_name='time',
+            standard_name='time',
+            long_name='time',
+            units=tunits,
+            bounds=np.array(tbounds))
+        output_cube.add_aux_coord(tcoord, (0, 2))
+
+        ltcoord = iris.coords.AuxCoord(
+            ltpoints,
+            var_name='leadtime',
+            long_name='leadtime',
+            units='days',
+            bounds=np.array(ltbounds))
+        output_cube.add_aux_coord(ltcoord, (0, 2))
+
+        lead_time_product = output_products[identifier]
+        lead_time_product.cubes = [output_cube]
+        for product in products:
+            lead_time_product.wasderivedfrom(product)
+        logger.info("Generated %s", lead_time_product)
+        lead_time_products.add(lead_time_product)
+
+    a = 1
+    return lead_time_products

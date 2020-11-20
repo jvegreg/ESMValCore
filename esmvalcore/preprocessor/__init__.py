@@ -21,13 +21,15 @@ from ._io import (_get_debug_filename, cleanup, concatenate, load, save,
 from ._mask import (mask_above_threshold, mask_below_threshold,
                     mask_fillvalues, mask_glaciated, mask_inside_range,
                     mask_landsea, mask_landseaice, mask_outside_range)
-from ._multimodel import multi_model_statistics
+from ._multimodel import (ensemble_statistics, multi_model_statistics,
+                          multicube_statistics, multicube_statistics_iris)
 from ._other import clip
 from ._regrid import extract_levels, extract_point, regrid
 from ._time import (annual_statistics, anomalies, climate_statistics,
                     daily_statistics, decadal_statistics, extract_month,
                     extract_season, extract_time, monthly_statistics,
-                    regrid_time, seasonal_statistics, timeseries_filter)
+                    regrid_time, seasonal_statistics, timeseries_filter,
+                    add_lead_time)
 from ._trend import linear_trend, linear_trend_stderr
 from ._units import convert_units
 from ._volume import (depth_integration, extract_trajectory, extract_transect,
@@ -56,6 +58,7 @@ __all__ = [
     # Data reformatting/CMORization
     'fix_data',
     'cmor_check_data',
+    'add_lead_time',
     # Level extraction
     'extract_levels',
     # Weighting
@@ -66,6 +69,9 @@ __all__ = [
     'mask_glaciated',
     # Mask landseaice, sftgif only
     'mask_landseaice',
+    # Ensemble statistics
+    'ensemble_statistics',
+    'multicube_statistics_iris',
     # Regridding
     'regrid',
     # Point interpolation
@@ -87,7 +93,9 @@ __all__ = [
     # 'average_zone': average_zone,
     # 'cross_section': cross_section,
     'detrend',
+    # Multi-model statistics
     'multi_model_statistics',
+    'multicube_statistics',
     # Grid-point operations
     'extract_named_regions',
     'depth_integration',
@@ -128,6 +136,7 @@ TIME_PREPROCESSORS = [
     'climate_statistics',
     'anomalies',
     'regrid_time',
+    'add_lead_time'
 ]
 
 DEFAULT_ORDER = tuple(__all__)
@@ -137,8 +146,7 @@ INITIAL_STEPS = DEFAULT_ORDER[:DEFAULT_ORDER.index('cmor_check_data') + 1]
 FINAL_STEPS = DEFAULT_ORDER[DEFAULT_ORDER.index('save'):]
 
 MULTI_MODEL_FUNCTIONS = {
-    'multi_model_statistics',
-    'mask_fillvalues',
+    'multi_model_statistics', 'mask_fillvalues', 'ensemble_statistics', 'add_lead_time'
 }
 
 
@@ -201,13 +209,14 @@ def _check_multi_model_settings(products):
             elif reference.settings[step] != settings:
                 raise ValueError(
                     "Unable to combine differing multi-dataset settings for "
-                    "{} and {}, {} and {}".format(
-                        reference.filename, product.filename,
-                        reference.settings[step], settings))
+                    "{} and {}, {} and {}".format(reference.filename,
+                                                  product.filename,
+                                                  reference.settings[step],
+                                                  settings))
 
 
 def _get_multi_model_settings(products, step):
-    """Select settings for multi model step"""
+    """Select settings for multi model step."""
     _check_multi_model_settings(products)
     settings = {}
     exclude = set()
@@ -231,7 +240,7 @@ def _run_preproc_function(function, items, kwargs):
 
 
 def preprocess(items, step, **settings):
-    """Run preprocessor"""
+    """Run preprocessor."""
     logger.debug("Running preprocessor step %s", step)
     function = globals()[step]
     itype = _get_itype(step)
@@ -245,8 +254,7 @@ def preprocess(items, step, **settings):
 
     items = []
     for item in result:
-        if isinstance(item,
-                      (PreprocessorFile, Cube, str)):
+        if isinstance(item, (PreprocessorFile, Cube, str)):
             items.append(item)
         else:
             items.extend(item)
@@ -271,10 +279,8 @@ def get_step_blocks(steps, order):
 
 class PreprocessorFile(TrackedFile):
     """Preprocessor output file."""
-
     def __init__(self, attributes, settings, ancestors=None):
-        super(PreprocessorFile, self).__init__(attributes['filename'],
-                                               attributes, ancestors)
+        super().__init__(attributes['filename'], attributes, ancestors)
 
         self.settings = copy.deepcopy(settings)
         if 'save' not in self.settings:
@@ -344,12 +350,33 @@ class PreprocessorFile(TrackedFile):
 
     def _initialize_entity(self):
         """Initialize the entity representing the file."""
-        super(PreprocessorFile, self)._initialize_entity()
+        super()._initialize_entity()
         settings = {
             'preprocessor:' + k: str(v)
             for k, v in self.settings.items()
         }
         self.entity.add_attributes(settings)
+
+    def group(self, keys: list) -> str:
+        """Generate group keyword.
+
+        Returns a string that identifies a group. Concatenates a list of
+        values from .attributes
+        """
+        if not keys:
+            return ''
+
+        if isinstance(keys, str):
+            keys = [keys]
+
+        identifier = []
+        for key in keys:
+            attribute = self.attributes[key]
+            if isinstance(attribute, (list, tuple)):
+                attribute = '-'.join(attribute)
+            identifier.append(attribute)
+
+        return '_'.join(identifier)
 
 
 # TODO: use a custom ProductSet that raises an exception if you try to
@@ -360,8 +387,8 @@ def _apply_multimodel(products, step, debug):
     """Apply multi model step to products."""
     settings, exclude = _get_multi_model_settings(products, step)
 
-    logger.debug("Applying %s to\n%s", step, '\n'.join(
-        str(p) for p in products - exclude))
+    logger.debug("Applying %s to\n%s", step,
+                 '\n'.join(str(p) for p in products - exclude))
     result = preprocess(products - exclude, step, **settings)
     products = set(result) | exclude
 
@@ -376,18 +403,15 @@ def _apply_multimodel(products, step, debug):
 
 
 class PreprocessingTask(BaseTask):
-    """Task for running the preprocessor"""
-
-    def __init__(
-            self,
-            products,
-            ancestors=None,
-            name='',
-            order=DEFAULT_ORDER,
-            debug=None,
-            write_ncl_interface=False,
-    ):
-        """Initialize"""
+    """Task for running the preprocessor."""
+    def __init__(self,
+                 products,
+                 ancestors=None,
+                 name='',
+                 order=DEFAULT_ORDER,
+                 debug=None,
+                 write_ncl_interface=False):
+        """Initialize."""
         _check_multi_model_settings(products)
         super().__init__(ancestors=ancestors, name=name, products=products)
         self.order = list(order)
@@ -396,17 +420,55 @@ class PreprocessingTask(BaseTask):
 
     def _initialize_product_provenance(self):
         """Initialize product provenance."""
-        for product in self.products:
-            product.initialize_provenance(self.activity)
+        self._initialize_products(self.products)
+        self._initialize_multimodel_provenance()
+        self._initialize_ensemble_provenance()
+        self._initialize_leadtime_provenance()
 
-        # Hacky way to initialize the multi model products as well.
-        step = 'multi_model_statistics'
-        input_products = [p for p in self.products if step in p.settings]
+    def _initialize_multiproduct_provenance(self, step):
+        input_products = self._get_input_products(step)
         if input_products:
-            statistic_products = input_products[0].settings[step].get(
-                'output_products', {}).values()
-            for product in statistic_products:
-                product.initialize_provenance(self.activity)
+            statistic_products = set()
+
+            for input_product in input_products:
+                step_settings = input_product.settings[step]
+                output_products = step_settings.get('output_products', {})
+
+                for product in output_products.values():
+                    statistic_products.update(product.values())
+
+            self._initialize_products(statistic_products)
+
+    def _initialize_multimodel_provenance(self):
+        """Initialize provenance for multi-model statistics."""
+        step = 'multi_model_statistics'
+        self._initialize_multiproduct_provenance(step)
+
+    def _initialize_ensemble_provenance(self):
+        """Initialize provenance for ensemble statistics."""
+        step = 'ensemble_statistics'
+        self._initialize_multiproduct_provenance(step)
+
+    def _initialize_leadtime_provenance(self):
+        """Initialize provenance for ensemble statistics."""
+        step = 'add_lead_time'
+        input_products = self._get_input_products(step)
+        if input_products:
+            for input_product in input_products:
+                step_settings = input_product.settings[step]
+                output_products = step_settings.get('output_products', {})
+            self._initialize_products(output_products.values())
+
+    def _get_input_products(self, step):
+        """Get input products."""
+        return [
+            product for product in self.products if step in product.settings
+        ]
+
+    def _initialize_products(self, products):
+        """Initialize products."""
+        for product in products:
+            product.initialize_provenance(self.activity)
 
     def _run(self, _):
         """Run the preprocessor."""
@@ -450,6 +512,6 @@ class PreprocessingTask(BaseTask):
             self.__class__.__name__,
             order,
             products,
-            super(PreprocessingTask, self).str(),
+            super().str(),
         )
         return txt
