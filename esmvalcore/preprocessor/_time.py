@@ -419,6 +419,7 @@ def climate_statistics(cube, operator='mean', period='full'):
                 cube = cube.collapsed('time',
                                       operator_method)
             else:
+                logger.info(cube.lazy_data().chunksize)
                 cube = cube.collapsed('time',
                                       operator_method,
                                       weights=time_weights)
