@@ -420,7 +420,7 @@ def climate_statistics(cube, operator='mean', period='full'):
                                       operator_method)
             else:
                 logger.info("Compute mean")
-                cube.lazy_data().mean(axis=(0,2))
+                cube.lazy_data().mean(axis=(0,2)).compute()
                 logger.info(cube.lazy_data().chunksize)
                 chunk = cube.lazy_data().rechunk((25,10,33,32,32))
                 cube = cube.copy(chunk)
