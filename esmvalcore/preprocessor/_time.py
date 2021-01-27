@@ -419,12 +419,6 @@ def climate_statistics(cube, operator='mean', period='full'):
                 cube = cube.collapsed('time',
                                       operator_method)
             else:
-                logger.info("Compute mean")
-                cube.lazy_data().mean(axis=(0,2)).compute()
-                logger.info(cube.lazy_data().chunksize)
-                chunk = cube.lazy_data().rechunk((25,10,33,32,32))
-                cube = cube.copy(chunk)
-                logger.info(cube.lazy_data().chunksize)
                 cube = cube.collapsed('time',
                                       operator_method,
                                       weights=time_weights)
@@ -778,7 +772,7 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
                 logger.error(
                     "Cannot retrieve startdate" +
                     "from attribute sub_experiment_id. ")
-            
+
             try:
                 ensemble = cube.attributes['variant_label']
                #cube.attributes.pop('variant_label')
@@ -821,7 +815,7 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
             cube.add_aux_coord(ensemble_coord, ())
 
             cubelist.append(cube)
-        
+
         tpoints = list(tpoints.values())
         tbounds = list(tbounds.values())
         ltpoints = list(ltpoints.values())
