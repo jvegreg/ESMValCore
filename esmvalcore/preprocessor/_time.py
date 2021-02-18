@@ -7,6 +7,7 @@ import copy
 import datetime
 import logging
 from warnings import filterwarnings
+import re
 
 
 import dask.array as da
@@ -337,6 +338,7 @@ def annual_statistics(cube, operator='mean'):
 
     if not cube.coords('year'):
         iris.coord_categorisation.add_year(cube, 'time')
+
     return cube.aggregated_by('year', operator)
 
 
@@ -409,7 +411,6 @@ def climate_statistics(cube, operator='mean', period='full'):
         Monthly statistics cube
     """
     period = period.lower()
-
     if period in ('full', ):
         operator_method = get_iris_analysis_operation(operator)
         if operator_accept_weights(operator):
@@ -505,6 +506,25 @@ def anomalies(cube, period, reference=None, standardize=False):
             [cube_stddev.core_data() for _ in range(int(reps))], axis=tdim)
         cube.units = '1'
     return cube
+
+
+def startdate_statistics(cube, operator='mean'):
+    data = da.mean(cube.lazy_data(), axis=(0,1))
+    result = iris.cube.Cube(
+        data,
+        standard_name=cube.standard_name,
+        long_name=cube.long_name,
+        var_name=cube.var_name,
+        units=cube.units,
+        attributes=cube.attributes,
+        cell_methods=cube.cell_methods,
+        dim_coords_and_dims = [(c, i) for i, c in enumerate(cube.coords(dim_coords=True)[2:None])])
+    
+    result.remove_coord('index along time dimension')
+    result.add_aux_coord(cube.coord('leadtime')[0,:], 0)
+    iris.util.promote_aux_coord_to_dim_coord(result, 'leadtime')
+    
+    return result
 
 
 def _compute_anomalies(cube, reference, period):
@@ -763,6 +783,10 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
         tbounds = {}
         ltpoints = {}
         ltbounds = {}
+        remove_coords = [
+            'clim_season', 'day_of_year', 'decade', 'month',
+            'month_number', 'season', 'season_year', 'year',
+            ]
         for cube in cubes:
             try:
                 startdate = int(cube.attributes['sub_experiment_id'][1:])
@@ -781,7 +805,9 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
                     "Cannot retrieve ensemble" +
                     "from attribute variant_label. ")
 
-            #cube.attributes = None
+            for aux_coord in cube.aux_coords:
+                if aux_coord.long_name in remove_coords:
+                    cube.remove_coord(aux_coord.long_name)
 
             time = cube.coord('time')
             tpoints[startdate] = time.points
@@ -807,7 +833,7 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
             cube.add_aux_coord(startdate_coord, ())
 
             ensemble_coord = iris.coords.AuxCoord(
-                ensemble,
+                int(''.join(re.findall('\d+', ensemble ))),
                 var_name='ensemble',
                 standard_name=None,
                 long_name='ensemble',
@@ -823,7 +849,12 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
 
         _fix_cube_attributes(cubelist)
         output_cube = cubelist.merge_cube()
+        for attribute in output_cube.attributes:
+            if ';' in str(output_cube.attributes[attribute]):
+                unique = set(output_cube.attributes[attribute].split(';'))
+                output_cube.attributes[attribute] ='; '.join(unique)
 
+        #pending to correct
         position = 2
         if output_cube.ndim == 3:
             position = 1
@@ -842,7 +873,7 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
             long_name='time',
             units=tunits,
             bounds=np.array(tbounds))
-        output_cube.add_aux_coord(tcoord, (0, position))
+        output_cube.add_aux_coord(tcoord, (1, position))
 
         ltcoord = iris.coords.AuxCoord(
             ltpoints,
@@ -850,7 +881,7 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
             long_name='leadtime',
             units='days',
             bounds=np.array(ltbounds))
-        output_cube.add_aux_coord(ltcoord, (0, position))
+        output_cube.add_aux_coord(ltcoord, (1, position))
 
         lead_time_product = output_products[identifier]
         lead_time_product.cubes = [output_cube]

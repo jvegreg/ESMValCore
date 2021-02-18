@@ -1,17 +1,21 @@
+"""Fixes for the ACCESS1-0 model."""
+import iris
+from cf_units import Unit
 from ..fix import Fix
-import cf_units
-
 
 class AllVars(Fix):
-    """Fixes for all vars."""
+    """Common fixes to all vars."""
 
     def fix_metadata(self, cubes):
-        """Fix parent time units.
+        """
+        Fix metadata.
+
+        Fixes wrong calendar 'gregorian' instead of 'proleptic_gregorian'.
 
         Parameters
         ----------
         cubes : iris.cube.CubeList
-            Input cubes.
+            Input cubes which need to be fixed.
 
         Returns
         -------
@@ -19,6 +23,13 @@ class AllVars(Fix):
 
         """
         for cube in cubes:
-            time = cf_units.Unit(cube.coord('time').units.origin, calendar='gregorian')
-            cube.coord('time').units = time
+            try:
+                time = cube.coord('time')
+            except iris.exceptions.CoordinateNotFoundError:
+                continue
+            else:
+                if time.units.calendar == 'proleptic_gregorian':
+                    time.convert_units(Unit("days since 1850-01-01",
+                                            calendar='proleptic_gregorian'))
+                    time.units = Unit(time.units.name, 'gregorian')
         return cubes

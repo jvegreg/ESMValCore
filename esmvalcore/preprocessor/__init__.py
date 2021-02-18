@@ -29,7 +29,7 @@ from ._time import (annual_statistics, anomalies, climate_statistics,
                     daily_statistics, decadal_statistics, extract_month,
                     extract_season, extract_time, monthly_statistics,
                     regrid_time, seasonal_statistics, timeseries_filter,
-                    add_lead_time)
+                    add_lead_time, startdate_statistics)
 from ._trend import linear_trend, linear_trend_stderr
 from ._units import convert_units
 from ._volume import (depth_integration, extract_trajectory, extract_transect,
@@ -113,6 +113,7 @@ __all__ = [
     'annual_statistics',
     'decadal_statistics',
     'climate_statistics',
+    'startdate_statistics',
     'anomalies',
     'regrid_time',
     'timeseries_filter',
@@ -134,6 +135,7 @@ TIME_PREPROCESSORS = [
     'annual_statistics',
     'decadal_statistics',
     'climate_statistics',
+    'startdate_statistics',
     'anomalies',
     'regrid_time',
     'add_lead_time'
