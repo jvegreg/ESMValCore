@@ -411,7 +411,6 @@ def climate_statistics(cube, operator='mean', period='full'):
         Monthly statistics cube
     """
     period = period.lower()
-
     if period in ('full', ):
         operator_method = get_iris_analysis_operation(operator)
         if operator_accept_weights(operator):
@@ -507,6 +506,25 @@ def anomalies(cube, period, reference=None, standardize=False):
             [cube_stddev.core_data() for _ in range(int(reps))], axis=tdim)
         cube.units = '1'
     return cube
+
+
+def startdate_statistics(cube, operator='mean'):
+    data = da.mean(cube.lazy_data(), axis=(0,1))
+    result = iris.cube.Cube(
+        data,
+        standard_name=cube.standard_name,
+        long_name=cube.long_name,
+        var_name=cube.var_name,
+        units=cube.units,
+        attributes=cube.attributes,
+        cell_methods=cube.cell_methods,
+        dim_coords_and_dims = [(c, i) for i, c in enumerate(cube.coords(dim_coords=True)[2:None])])
+    
+    result.remove_coord('index along time dimension')
+    result.add_aux_coord(cube.coord('leadtime')[0,:], 0)
+    iris.util.promote_aux_coord_to_dim_coord(result, 'leadtime')
+    
+    return result
 
 
 def _compute_anomalies(cube, reference, period):
@@ -831,6 +849,10 @@ def add_lead_time(input_products: set, output_products: set, groupby: str = ('pr
 
         _fix_cube_attributes(cubelist)
         output_cube = cubelist.merge_cube()
+        for attribute in output_cube.attributes:
+            if ';' in str(output_cube.attributes[attribute]):
+                unique = set(output_cube.attributes[attribute].split(';'))
+                output_cube.attributes[attribute] ='; '.join(unique)
 
         #pending to correct
         position = 2
