@@ -55,6 +55,7 @@ from ._time import (
     extract_month,
     extract_season,
     extract_time,
+    flux_to_total,
     hourly_statistics,
     monthly_statistics,
     regrid_time,
@@ -135,6 +136,7 @@ __all__ = [
     # 'cross_section': cross_section,
     'detrend',
     'multi_model_statistics',
+    'flux_to_total',
     # Grid-point operations
     'extract_named_regions',
     'depth_integration',

@@ -983,3 +983,24 @@ def resample_time(cube, month=None, day=None, hour=None):
         return True
 
     return cube.extract(iris.Constraint(time=compare))
+
+
+def flux_to_total(cube):
+    time = cube.coord('time')
+    time_span = time.bounds[:, 1] - time.bounds[:, 0]
+    units = cube.units.definition.split('.')
+    if 's-1' in units:
+        time_span *= 3600
+        units.remove('s-1')
+    elif 'day-1' in units:
+        # Already in days
+        units.remove('day-1')
+    else:
+        raise ValueError(
+            f'Units {cube.units} do not contains a supported flux definition')
+    dims = list(range(cube.ndim))
+    dims.remove(cube.coord_dims(time)[0])
+    time_span = np.expand_dims(time_span, dims)
+    cube = cube.copy(cube.core_data() * time_span)
+    cube.units = ' '.join(units)
+    return cube

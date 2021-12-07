@@ -285,6 +285,17 @@ def area_statistics(cube, operator):
             "area_statistics changed dtype from "
             "%s to %s, changing back", original_dtype, new_dtype)
         result.data = result.core_data().astype(original_dtype)
+    if operator == 'sum':
+        units = cube.units.definition.split('.')
+        if 'm-2' in units:
+            units.remove('m-2')
+            result.units = ' '.join(units)
+        elif 'm-3' in units:
+            units.remove('m-3')
+            units.append('m-1')
+            result.units = ' '.join(units)
+        else:
+            logger.warning('Units are only fixed in area sums if original is given in m-2')
     return result
 
 

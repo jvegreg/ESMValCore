@@ -99,6 +99,10 @@ def concatenate_callback(raw_cube, field, _):
             units = _get_attr_from_field_coord(field, coord.var_name, 'units')
             if units is not None:
                 coord.units = units
+        # CMOR sometimes adds a history to the coordinates.
+        for attr in ['history', ]:
+            if attr in coord.attributes:
+                del coord.attributes[attr]
 
 
 def load(file, callback=None):
